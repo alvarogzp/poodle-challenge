@@ -71,6 +71,46 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 		socket.send("error\n") # TODO
 
 
+class SslClientRequest:
+	def __init__(self, path, credentials, body):
+		self.http_request = self.build_http_request(path, credentials, body)
+		self.response = None
+	
+	def run(self):
+		socket = self.connect_to_server()
+		ssl_socket = self.wrap_with_ssl_socket(socket)
+		valid_handshake = self.perform_ssl_handshake(ssl_socket)
+		if valid_handshake:
+			self.send_request(ssl_socket)
+			self.response = self.get_response(ssl_socket)
+		self.shutdown_socket(ssl_socket)
+	
+	def build_http_request(self, path, credentials, body):
+		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s"""
+	
+	def connect_to_server(self):
+		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
+	
+	def wrap_with_ssl_socket(self, socket):
+		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="file", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
+	
+	def perform_ssl_handshake(self, ssl_socket):
+		try:
+			ssl_socket.do_handshake()
+			return True
+		except:
+			return False
+	
+	def send_request(self, socket):
+		socket.sendall(self.http_request)
+	
+	def get_response(self, socket):
+		return socket.recv(RECV_BUFFER) # TODO?
+	
+	def shutdown_socket(self, socket):
+		socket.close()
+
+
 class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 	def handle(self):
 		path, credentials, body = self.handle_initial_request()
@@ -115,46 +155,6 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		if end_position == -1:
 			pass # TODO raise?
 		return string[start_position:end_position], end_position + len(after_end)
-
-
-class SslClientRequest:
-	def __init__(self, path, credentials, body):
-		self.http_request = self.build_http_request(path, credentials, body)
-		self.response = None
-	
-	def run(self):
-		socket = self.connect_to_server()
-		ssl_socket = self.wrap_with_ssl_socket(socket)
-		valid_handshake = self.perform_ssl_handshake(ssl_socket)
-		if valid_handshake:
-			self.send_request(ssl_socket)
-			self.response = self.get_response(ssl_socket)
-		self.shutdown_socket(ssl_socket)
-	
-	def build_http_request(self, path, credentials, body):
-		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s"""
-	
-	def connect_to_server(self):
-		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
-	
-	def wrap_with_ssl_socket(self, socket):
-		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="file", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
-	
-	def perform_ssl_handshake(self, ssl_socket):
-		try:
-			ssl_socket.do_handshake()
-			return True
-		except:
-			return False
-	
-	def send_request(self, socket):
-		socket.sendall(self.http_request)
-	
-	def get_response(self, socket):
-		return socket.recv(RECV_BUFFER) # TODO?
-	
-	def shutdown_socket(self, socket):
-		socket.close()
 
 
 if __name__ == "__main__":
