@@ -18,10 +18,13 @@ SSL_VERSION = ssl.PROTOCOL_SSLv3
 class ThreadedTCPServer(SocketServer.ThreadingTCPServer):
 	daemon_threads = KILL_THREADS_WHEN_MAIN_ENDS
 	
-	def start(self):
+	def start_background(self):
 		ssl_server_thread = threading.Thread(target=self.serve_forever)
 		ssl_server_thread.daemon = self.daemon_threads
 		ssl_server_thread.start()
+	
+	def start_foreground(self):
+		self.serve_forever()
 
 
 class SslServerRequestHandler(SocketServer.BaseRequestHandler):
@@ -32,7 +35,7 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 			self.handle_http_request(self.ssl_socket)
 	
 	def wrap_with_ssl_socket(self, socket):
-		return ssl.wrap_socket(socket, server_side=True, cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO use keyfile and certfile, force cbc block cipher
+		return ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True, cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO force cbc block cipher
 	
 	def handle_ssl_handshake(self, ssl_socket):
 		try:
@@ -156,10 +159,10 @@ class SslClientRequest:
 
 if __name__ == "__main__":
 	ssl_server = ThreadedTCPServer(INTERNAL_SSL_ENDPOINT, SslServerRequestHandler)
-	ssl_server.start()
+	ssl_server.start_background()
 	
 	public_server = ThreadedTCPServer(PUBLIC_ENDPOINT, PublicServerRequestHandler)
-	public_server.serve_forever()
+	public_server.start_foreground()
 	
 	# TODO
 	
