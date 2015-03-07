@@ -72,12 +72,14 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 
 
 class SslClientRequest:
-	def __init__(self, path, credentials, body):
+	def __init__(self, sniffer, path, credentials, body):
+		self.sniffer = sniffer
 		self.http_request = self.build_http_request(path, credentials, body)
 		self.response = '' # TODO error?
 	
 	def run(self):
 		socket = self.connect_to_server()
+		self.inject_sniffer(self.sniffer, socket)
 		ssl_socket = self.wrap_with_ssl_socket(socket)
 		valid_handshake = self.perform_ssl_handshake(ssl_socket)
 		if valid_handshake:
@@ -90,6 +92,9 @@ class SslClientRequest:
 	
 	def connect_to_server(self):
 		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
+	
+	def inject_sniffer(self, sniffer, socket):
+		sniffer.install_sniffer(socket)
 	
 	def wrap_with_ssl_socket(self, socket):
 		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
@@ -111,6 +116,52 @@ class SslClientRequest:
 		socket.close()
 
 
+class SocketSniffer:
+	def __init__(self, processor):
+		self.processor = processor
+	
+	def install_sniffer(self, socket):
+		self.__real_recv = socket.recv
+		self.__real_send = socket.send
+		socket.send = self.__sniff_and_send
+		socket.recv = self.__sniff_and_recv
+	
+	def __sniff_and_send(self, *params):
+		self.processor.send(*params)
+		self.__real_send(*params)
+	
+	def __sniff_and_recv(self, *params):
+		self.processor.recv(*params)
+		self.__real_recv(*params)
+
+
+class ForwardDataProcessor:
+	def __init__(self, file, formatter):
+		self.file = file
+		self.formatter = formatter
+	
+	def send(self, *params):
+		string = params[0]
+		formatted_data = formatter(string).sent()
+		self.file.write(formatted_data)
+	
+	def recv(self, *params):
+		string = params[0]
+		formatted_data = formatter(string).received()
+		self.file.write(formatted_data)
+
+
+class Base64WithOriginFormatter:
+	def __init__(self, string):
+		self.string = string
+	
+	def sent(self):
+		return 'S-' + self.string.encode("base64") + '\n'
+	
+	def received(self):
+		return 'C-' + self.string.encode("base64") + '\n'
+
+
 class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 	def handle(self):
 		path, credentials, body = self.handle_initial_request()
@@ -125,7 +176,10 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		return path, credentials, body
 	
 	def perform_https_connection(self, path, credentials, body):
-		ssl_client = SslClientRequest(path, credentials, body)
+		formatter = Base64WithOriginFormatter
+		processor = ForwardDataProcessor(self.wfile, formatter)
+		sniffer = SocketSniffer(processor)
+		ssl_client = SslClientRequest(sniffer, path, credentials, body)
 		ssl_client.run()
 		self.wfile.write(ssl_client.response)
 	
