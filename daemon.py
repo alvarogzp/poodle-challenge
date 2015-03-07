@@ -74,7 +74,7 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 class SslClientRequest:
 	def __init__(self, path, credentials, body):
 		self.http_request = self.build_http_request(path, credentials, body)
-		self.response = None
+		self.response = '' # TODO error?
 	
 	def run(self):
 		socket = self.connect_to_server()
@@ -86,13 +86,13 @@ class SslClientRequest:
 		self.shutdown_socket(ssl_socket)
 	
 	def build_http_request(self, path, credentials, body):
-		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s"""
+		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s""" % (path, credentials, body)
 	
 	def connect_to_server(self):
 		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
 	
 	def wrap_with_ssl_socket(self, socket):
-		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="file", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
+		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
 	
 	def perform_ssl_handshake(self, ssl_socket):
 		try:
