@@ -142,12 +142,12 @@ class ForwardDataProcessor:
 	
 	def send(self, *params):
 		string = params[0]
-		formatted_data = formatter(string).sent()
+		formatted_data = self.formatter(string).sent()
 		self.file.write(formatted_data)
 	
 	def recv(self, *params):
 		string = params[0]
-		formatted_data = formatter(string).received()
+		formatted_data = self.formatter(string).received()
 		self.file.write(formatted_data)
 
 
