@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-################# TODO STATUS: ahora mismo se conecta el cliente directamente al servidor, hay que crear un servidor que haga el MITM, reenviando el tráfico SSL recibido por ambos sockets y enviando el que el cliente del MITM decida
+################# TODO STATUS: ahora mismo se conecta el cliente directamente al servidor, hay que crear un servidor que haga el MITM, reenviando el trafico SSL recibido por ambos sockets y enviando el que el cliente del MITM decida
 import socket
 import SocketServer
 import ssl
@@ -9,19 +9,22 @@ import sys
 PUBLIC_ENDPOINT = ('', 4747)
 
 INTERNAL_SSL_ENDPOINT = ('127.0.0.1', 65186)
+INTERNAL_FORWARD_ENDPOINT = ('127.0.0.1', 65187)
 RECV_BUFFER = 4096
 KILL_THREADS_WHEN_MAIN_ENDS = True
 
 SSL_VERSION = ssl.PROTOCOL_SSLv3
 
 
+class Thread(threading.Thread):
+	def __init__(self, *args, **dargs):
+		super(Thread, self).__init__(*args, **dargs)
+		self.daemon = KILL_THREADS_WHEN_MAIN_ENDS
+
+
 class ThreadedTCPServer(SocketServer.ThreadingTCPServer):
-	daemon_threads = KILL_THREADS_WHEN_MAIN_ENDS
-	
 	def start_background(self):
-		ssl_server_thread = threading.Thread(target=self.serve_forever)
-		ssl_server_thread.daemon = self.daemon_threads
-		ssl_server_thread.start()
+		Thread(target=self.serve_forever).start()
 	
 	def start_foreground(self):
 		self.serve_forever()
@@ -71,6 +74,38 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 		socket.send("error\n") # TODO
 
 
+class ForwardServerRequestHandler(SocketServer.BaseRequestHandler):
+	def handle(self):
+		client_socket = socket.create_connection(INTERNAL_SSL_ENDPOINT)
+		self.forward(self.request, client_socket)
+	
+	def forward(self, socket_1, socket_2):
+		forwarder_1_2 = StreamForwarder(socket_1, socket_2).forward()
+		forwarder_2_1 = StreamForwarder(socket_2, socket_1).forward()
+		forwarder_1_2.wait()
+		forwarder_2_1.wait()
+
+
+class StreamForwarder:
+	def __init__(self, in_socket, out_socket):
+		self.in_socket = in_socket
+		self.out_socket = out_socket
+	
+	def forward(self):
+		self.thread = Thread(target=self.forward_loop)
+		self.thread.start()
+		return self
+	
+	def forward_loop(self):
+		read = self.in_socket.recv(RECV_BUFFER)
+		while read:
+			self.out_socket.sendall(read)
+			read = self.in_socket.recv(RECV_BUFFER)
+	
+	def wait(self):
+		self.thread.join()
+
+
 class SslClientRequest:
 	def __init__(self, sniffer, path, credentials, body):
 		self.sniffer = sniffer
@@ -91,7 +126,7 @@ class SslClientRequest:
 		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s""" % (path, credentials, body)
 	
 	def connect_to_server(self):
-		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
+		return socket.create_connection(INTERNAL_FORWARD_ENDPOINT)
 	
 	def inject_sniffer(self, sniffer, socket):
 		sniffer.install_sniffer(socket)
@@ -215,10 +250,14 @@ if __name__ == "__main__":
 	ssl_server = ThreadedTCPServer(INTERNAL_SSL_ENDPOINT, SslServerRequestHandler)
 	ssl_server.start_background()
 	
+	forward_server = ThreadedTCPServer(INTERNAL_FORWARD_ENDPOINT, ForwardServerRequestHandler)
+	forward_server.start_background()
+	
 	public_server = ThreadedTCPServer(PUBLIC_ENDPOINT, PublicServerRequestHandler)
 	public_server.start_foreground()
 	
 	# TODO
 	
+	forward_server.shutdown()
 	ssl_server.shutdown()
 
