@@ -107,14 +107,12 @@ class StreamForwarder:
 
 
 class SslClientRequest:
-	def __init__(self, sniffer, path, credentials, body):
-		self.sniffer = sniffer
+	def __init__(self, path, credentials, body):
 		self.http_request = self.build_http_request(path, credentials, body)
 		self.response = '' # TODO error?
 	
 	def run(self):
 		socket = self.connect_to_server()
-		self.inject_sniffer(self.sniffer, socket)
 		ssl_socket = self.wrap_with_ssl_socket(socket)
 		valid_handshake = self.perform_ssl_handshake(ssl_socket)
 		if valid_handshake:
@@ -127,9 +125,7 @@ class SslClientRequest:
 	
 	def connect_to_server(self):
 		return socket.create_connection(INTERNAL_FORWARD_ENDPOINT)
-	
-	def inject_sniffer(self, sniffer, socket):
-		sniffer.install_sniffer(socket)
+
 	
 	def wrap_with_ssl_socket(self, socket):
 		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
@@ -214,7 +210,7 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		formatter = Base64WithOriginFormatter
 		processor = ForwardDataProcessor(self.wfile, formatter)
 		sniffer = SocketSniffer(processor)
-		ssl_client = SslClientRequest(sniffer, path, credentials, body)
+		ssl_client = SslClientRequest(path, credentials, body)
 		ssl_client.run()
 		self.wfile.write(ssl_client.response)
 	
