@@ -15,6 +15,11 @@ KILL_THREADS_WHEN_MAIN_ENDS = True
 
 SSL_VERSION = ssl.PROTOCOL_SSLv3
 
+MITM_KEY_RECEIVED = "ok"
+ENDPOINT_SERVER = 'S'
+ENDPOINT_CLIENT = 'C'
+MESSAGE_ENDPOINT_SEPARATOR = '-'
+
 
 class MitmExchanger:
 	instance = None
@@ -111,16 +116,16 @@ class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
 	
 	def get_mitm_key(self, socket):
 		mitm_key = socket.recv(RECV_BUFFER)
-		socket.send("ok")
+		socket.send(MITM_KEY_RECEIVED)
 		return mitm_key
 	
 	def get_mitm(self, mitm_key):
 		return MitmExchanger.instance().pop(mitm_key)
 	
 	def forward(self, server_socket, client_socket, mitm):
-		forwarder_from_server = SocketStreamForwarder(server_socket, mitm.server_socket).forward()
-		forwarder_from_client = SocketStreamForwarder(client_socket, mitm.client_socket).forward()
-		forwarder_from_mitm = SocketStreamForwarder(mitm.recv_socket, mitm.send_socket).forward()
+		forwarder_from_server = SocketStreamForwarder(server_socket, mitm.server_out_socket).forward()
+		forwarder_from_client = SocketStreamForwarder(client_socket, mitm.client_out_socket).forward()
+		forwarder_from_mitm = SocketStreamForwarder(mitm.recv_socket, mitm.send_socket(server_socket, client_socket)).forward()
 		forwarder_from_server.wait()
 		forwarder_from_client.wait()
 		forwarder_from_mitm.wait()
@@ -147,12 +152,14 @@ class SocketStreamForwarder:
 
 
 class SslClientRequest:
-	def __init__(self, path, credentials, body):
+	def __init__(self, initial_payload, path, credentials, body):
+		self.initial_payload = initial_payload
 		self.http_request = self.build_http_request(path, credentials, body)
 		self.response = '' # TODO error?
 	
 	def run(self):
 		socket = self.connect_to_server()
+		self.send_initial_payload(socket, self.initial_payload)
 		ssl_socket = self.wrap_with_ssl_socket(socket)
 		valid_handshake = self.perform_ssl_handshake(ssl_socket)
 		if valid_handshake:
@@ -165,7 +172,11 @@ class SslClientRequest:
 	
 	def connect_to_server(self):
 		return socket.create_connection(INTERNAL_FORWARD_ENDPOINT)
-
+	
+	def send_initial_payload(self, socket, initial_payload):
+		socket.sendall(initial_payload)
+		ack = socket.recv(RECV_BUFFER)
+		assert ack == MITM_KEY_RECEIVED
 	
 	def wrap_with_ssl_socket(self, socket):
 		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
@@ -188,47 +199,75 @@ class SslClientRequest:
 
 
 class MitmSocketAggregator:
-	def __init__(self, client_socket, server_socket):
-		self.client_socket = client_socket
-		self.server_socket = server_socket
+	def __init__(self, server_socket, client_socket, recv_socket, send_socket):
+		self.server_out_socket = server_socket
+		self.client_out_socket = client_socket
+		self.recv_socket = recv_socket
+		self._send_socket = send_socket
+	
+	def send_socket(self, server_socket, client_socket):
+		return self._send_socket.processor.set_router(EndpointRouter(server_socket, client_socket))
 
 
-class MitmSocket:
+class MitmInSocket:
+	def __init__(self, rfile):
+		self.rfile = rfile
+	
+	def recv(self, bufsize):
+		return self.rfile.readline()
+
+
+class MitmOutSocket:
 	def __init__(self, processor):
 		self.processor = processor
 	
 	def send(self, string):
-		self.processor.send(string)
+		self.processor.process(string)
+
+
+class FormatDataProcessor:
+	def __init__(self, formatter, action):
+		self.formatter = formatter
+		self.action = action
 	
-	def recv(self, bufsize):
-		self.processor.recv(bufsize)
+	def process(self, string):
+		formatted_data = self.formatter.format(string)
+		self.action(formatted_data)
 
 
-class ForwardDataProcessor:
-	def __init__(self, file, formatter):
-		self.file = file
+class Base64WithEndpointFormatter:
+	def __init__(self, endpoint):
+		self.endpoint = endpoint
+	
+	def format(self, string):
+		return self.endpoint + MESSAGE_ENDPOINT_SEPARATOR + string.encode("base64") + '\n'
+	
+	def unformat(cls, string):
+		return (endpoint, string) # TODO
+
+
+class UnformatDataProcessor:
+	def __init__(self, formatter):
 		self.formatter = formatter
 	
-	def send(self, *params):
-		string = params[0]
-		formatted_data = self.formatter(string).sent()
-		self.file.write(formatted_data)
+	def set_router(self, router):
+		self.router = router
 	
-	def recv(self, *params):
-		string = params[0]
-		formatted_data = self.formatter(string).received()
-		self.file.write(formatted_data)
+	def process(self, string):
+		endpoint, text = self.formatter.unformat(string)
+		self.router.get(endpoint).sendall(text)
 
 
-class Base64WithOriginFormatter:
-	def __init__(self, string):
-		self.string = string
+class EndpointRouter:
+	def __init__(self, server_socket, client_socket):
+		self.server_socket = server_socket
+		self.client_socket = client_socket
 	
-	def sent(self):
-		return 'S-' + self.string.encode("base64") + '\n'
-	
-	def received(self):
-		return 'C-' + self.string.encode("base64") + '\n'
+	def get(self, endpoint):
+		if endpoint == ENDPOINT_SERVER:
+			return self.server_socket
+		elif endpoint == ENDPOINT_CLIENT:
+			return self.client_socket
 
 
 class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
@@ -245,9 +284,21 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		return path, credentials, body
 	
 	def perform_https_connection(self, path, credentials, body):
-		formatter = Base64WithOriginFormatter
+		formatter = Base64WithEndpointFormatter
 		processor = ForwardDataProcessor(self.wfile, formatter)
 		sniffer = SocketSniffer(processor)
+		
+		server_socket_processor_formatter = Base64WithEndpointFormatter(ENDPOINT_SERVER)
+		server_socket_processor_action = self.wfile.write
+		server_socket_processor = FormatDataProcessor(server_socket_processor_formatter, server_socket_processor_action)
+		server_socket = MitmOutSocket(server_socket_processor)
+		
+		# TODO
+		client_socket = MitmOutSocket
+		recv_socket
+		send_socket
+		MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
+		
 		ssl_client = SslClientRequest(path, credentials, body)
 		ssl_client.run()
 		self.wfile.write(ssl_client.response)
