@@ -16,6 +16,31 @@ KILL_THREADS_WHEN_MAIN_ENDS = True
 SSL_VERSION = ssl.PROTOCOL_SSLv3
 
 
+class MitmExchanger:
+	instance = None
+	
+	def __init__(self):
+		self.mitms = {}
+		self.counter = 0
+		self.lock = threading.Lock()
+	
+	def instance(cls):
+		if not cls.instance:
+			cls.instance = cls()
+		return cls.instance
+	
+	def put(self, mitm):
+		with self.lock:
+			key = self.counter
+			self.counter += 1
+		self.mitms[key] = mitm
+		return key
+	
+	def pop(self, key):
+		mitm = self.mitms[key]
+		del self.mitms[key]
+
+
 class Thread(threading.Thread):
 	def __init__(self, *args, **dargs):
 		super(Thread, self).__init__(*args, **dargs)
@@ -74,19 +99,34 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 		socket.send("error\n") # TODO
 
 
-class ForwardServerRequestHandler(SocketServer.BaseRequestHandler):
+class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
 	def handle(self):
-		client_socket = socket.create_connection(INTERNAL_SSL_ENDPOINT)
-		self.forward(self.request, client_socket)
+		mitm_key = self.get_mitm_key(self.request)
+		mitm = self.get_mitm(mitm_key)
+		client_socket = self.connect_client_socket()
+		self.forward(self.request, client_socket, mitm)
 	
-	def forward(self, socket_1, socket_2):
-		forwarder_1_2 = StreamForwarder(socket_1, socket_2).forward()
-		forwarder_2_1 = StreamForwarder(socket_2, socket_1).forward()
-		forwarder_1_2.wait()
-		forwarder_2_1.wait()
+	def connect_client_socket(self):
+		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
+	
+	def get_mitm_key(self, socket):
+		mitm_key = socket.recv(RECV_BUFFER)
+		socket.send("ok")
+		return mitm_key
+	
+	def get_mitm(self, mitm_key):
+		return MitmExchanger.instance().pop(mitm_key)
+	
+	def forward(self, server_socket, client_socket, mitm):
+		forwarder_from_server = SocketStreamForwarder(server_socket, mitm.server_socket).forward()
+		forwarder_from_client = SocketStreamForwarder(client_socket, mitm.client_socket).forward()
+		forwarder_from_mitm = SocketStreamForwarder(mitm.recv_socket, mitm.send_socket).forward()
+		forwarder_from_server.wait()
+		forwarder_from_client.wait()
+		forwarder_from_mitm.wait()
 
 
-class StreamForwarder:
+class SocketStreamForwarder:
 	def __init__(self, in_socket, out_socket):
 		self.in_socket = in_socket
 		self.out_socket = out_socket
@@ -147,23 +187,21 @@ class SslClientRequest:
 		socket.close()
 
 
-class SocketSniffer:
+class MitmSocketAggregator:
+	def __init__(self, client_socket, server_socket):
+		self.client_socket = client_socket
+		self.server_socket = server_socket
+
+
+class MitmSocket:
 	def __init__(self, processor):
 		self.processor = processor
 	
-	def install_sniffer(self, socket):
-		self.__real_recv = socket.recv
-		self.__real_send = socket.send
-		socket.send = self.__sniff_and_send
-		socket.recv = self.__sniff_and_recv
+	def send(self, string):
+		self.processor.send(string)
 	
-	def __sniff_and_send(self, *params):
-		self.processor.send(*params)
-		self.__real_send(*params)
-	
-	def __sniff_and_recv(self, *params):
-		self.processor.recv(*params)
-		self.__real_recv(*params)
+	def recv(self, bufsize):
+		self.processor.recv(bufsize)
 
 
 class ForwardDataProcessor:
