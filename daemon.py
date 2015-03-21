@@ -284,22 +284,27 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		return path, credentials, body
 	
 	def perform_https_connection(self, path, credentials, body):
-		formatter = Base64WithEndpointFormatter
-		processor = ForwardDataProcessor(self.wfile, formatter)
-		sniffer = SocketSniffer(processor)
-		
-		server_socket_processor_formatter = Base64WithEndpointFormatter(ENDPOINT_SERVER)
-		server_socket_processor_action = self.wfile.write
-		server_socket_processor = FormatDataProcessor(server_socket_processor_formatter, server_socket_processor_action)
+		server_socket_formatter = Base64WithEndpointFormatter(ENDPOINT_SERVER)
+		server_socket_action = self.wfile.write
+		server_socket_processor = FormatDataProcessor(server_socket_formatter, server_socket_action)
 		server_socket = MitmOutSocket(server_socket_processor)
 		
-		# TODO
-		client_socket = MitmOutSocket
-		recv_socket
-		send_socket
-		MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
+		client_socket_formatter = Base64WithEndpointFormatter(ENDPOINT_CLIENT)
+		client_socket_action = self.wfile.write
+		client_socket_processor = FormatDataProcessor(client_socket_formatter, client_socket_action)
+		client_socket = MitmOutSocket(client_socket_processor)
 		
-		ssl_client = SslClientRequest(path, credentials, body)
+		recv_socket = MitmInSocket(self.rfile)
+		
+		send_socket_formatter = Base64WithEndpointFormatter
+		send_socket_processor = UnformatDataProcessor(send_socket_formatter)
+		send_socket = MitmOutSocket(send_socket_processor)
+		
+		mitm_socket = MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
+		
+		mitm_socket_key = MitmExchanger.put(mitm_socket)
+		
+		ssl_client = SslClientRequest(str(mitm_socket_key), path, credentials, body)
 		ssl_client.run()
 		self.wfile.write(ssl_client.response)
 	
