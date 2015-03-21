@@ -22,17 +22,18 @@ MESSAGE_ENDPOINT_SEPARATOR = '-'
 
 
 class MitmExchanger:
-	instance = None
+	__instance = None
 	
 	def __init__(self):
 		self.mitms = {}
 		self.counter = 0
 		self.lock = threading.Lock()
 	
+	@classmethod
 	def instance(cls):
-		if not cls.instance:
-			cls.instance = cls()
-		return cls.instance
+		if not cls.__instance:
+			cls.__instance = cls()
+		return cls.__instance
 	
 	def put(self, mitm):
 		with self.lock:
@@ -44,6 +45,7 @@ class MitmExchanger:
 	def pop(self, key):
 		mitm = self.mitms[key]
 		del self.mitms[key]
+		return mitm
 
 
 class Thread(threading.Thread):
@@ -53,6 +55,8 @@ class Thread(threading.Thread):
 
 
 class ThreadedTCPServer(SocketServer.ThreadingTCPServer):
+	daemon_threads = KILL_THREADS_WHEN_MAIN_ENDS
+	
 	def start_background(self):
 		Thread(target=self.serve_forever).start()
 	
@@ -115,7 +119,7 @@ class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
 		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
 	
 	def get_mitm_key(self, socket):
-		mitm_key = socket.recv(RECV_BUFFER)
+		mitm_key = int(socket.recv(RECV_BUFFER))
 		socket.send(MITM_KEY_RECEIVED)
 		return mitm_key
 	
@@ -206,7 +210,8 @@ class MitmSocketAggregator:
 		self._send_socket = send_socket
 	
 	def send_socket(self, server_socket, client_socket):
-		return self._send_socket.processor.set_router(EndpointRouter(server_socket, client_socket))
+		self._send_socket.processor.set_router(EndpointRouter(server_socket, client_socket))
+		return self._send_socket
 
 
 class MitmInSocket:
@@ -221,7 +226,7 @@ class MitmOutSocket:
 	def __init__(self, processor):
 		self.processor = processor
 	
-	def send(self, string):
+	def sendall(self, string):
 		self.processor.process(string)
 
 
@@ -242,6 +247,7 @@ class Base64WithEndpointFormatter:
 	def format(self, string):
 		return self.endpoint + MESSAGE_ENDPOINT_SEPARATOR + string.encode("base64") + '\n'
 	
+	@classmethod
 	def unformat(cls, string):
 		return (endpoint, string) # TODO
 
@@ -302,7 +308,7 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		
 		mitm_socket = MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
 		
-		mitm_socket_key = MitmExchanger.put(mitm_socket)
+		mitm_socket_key = MitmExchanger.instance().put(mitm_socket)
 		
 		ssl_client = SslClientRequest(str(mitm_socket_key), path, credentials, body)
 		ssl_client.run()
@@ -340,7 +346,7 @@ if __name__ == "__main__":
 	ssl_server = ThreadedTCPServer(INTERNAL_SSL_ENDPOINT, SslServerRequestHandler)
 	ssl_server.start_background()
 	
-	forward_server = ThreadedTCPServer(INTERNAL_FORWARD_ENDPOINT, ForwardServerRequestHandler)
+	forward_server = ThreadedTCPServer(INTERNAL_FORWARD_ENDPOINT, MitmServerRequestHandler)
 	forward_server.start_background()
 	
 	public_server = ThreadedTCPServer(PUBLIC_ENDPOINT, PublicServerRequestHandler)
