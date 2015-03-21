@@ -240,27 +240,51 @@ class FormatDataProcessor:
 		self.action(formatted_data)
 
 
-class Base64WithEndpointFormatter:
-	def __init__(self, endpoint):
+class EncodeAndEndpointFormatter:
+	def __init__(self, endpoint, codec):
 		self.endpoint = endpoint
+		self.codec = codec
 	
 	def format(self, string):
-		return self.endpoint + MESSAGE_ENDPOINT_SEPARATOR + string.encode("base64") + '\n'
+		return self.endpoint + MESSAGE_ENDPOINT_SEPARATOR + self.codec.encode(string) + '\n'
+
+
+class DecodeAndEndpointUnformatter:
+	def __init__(self, codec):
+		self.codec = codec
 	
-	@classmethod
-	def unformat(cls, string):
-		return (endpoint, string) # TODO
+	def unformat(self, string):
+		string = self.remove_trailing_newline(string)
+		endpoint, encoded_string = self.split_by_separator(string)
+		decoded_string = self.codec.decode(encoded_string)
+		return (endpoint, decoded_string)
+	
+	def remove_trailing_newline(self, string):
+		if string[-1] == '\n':
+			string = string[:-1]
+		return string
+	
+	def split_by_separator(self, string):
+		return string.split(MESSAGE_ENDPOINT_SEPARATOR, 1)
 
 
-class UnformatDataProcessor:
-	def __init__(self, formatter):
-		self.formatter = formatter
+class Base64Codec:
+	def encode(self, string):
+		return string.encode("base64").replace("\n", "")
+	
+	def decode(self, string):
+		return string.decode("base64")
+
+
+class UnformatAndRouteByEndpointDataProcessor:
+	def __init__(self, unformatter):
+		self.unformatter = unformatter
 	
 	def set_router(self, router):
 		self.router = router
 	
 	def process(self, string):
-		endpoint, text = self.formatter.unformat(string)
+		endpoint, text = self.unformatter.unformat(string)
 		self.router.get(endpoint).sendall(text)
 
 
@@ -290,20 +314,25 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		return path, credentials, body
 	
 	def perform_https_connection(self, path, credentials, body):
-		server_socket_formatter = Base64WithEndpointFormatter(ENDPOINT_SERVER)
+		# TODO create a factory for this
+		
+		server_socket_codec = Base64Codec()
+		server_socket_formatter = EncodeAndEndpointFormatter(ENDPOINT_SERVER, server_socket_codec)
 		server_socket_action = self.wfile.write
 		server_socket_processor = FormatDataProcessor(server_socket_formatter, server_socket_action)
 		server_socket = MitmOutSocket(server_socket_processor)
 		
-		client_socket_formatter = Base64WithEndpointFormatter(ENDPOINT_CLIENT)
+		client_socket_codec = Base64Codec()
+		client_socket_formatter = EncodeAndEndpointFormatter(ENDPOINT_CLIENT, client_socket_codec)
 		client_socket_action = self.wfile.write
 		client_socket_processor = FormatDataProcessor(client_socket_formatter, client_socket_action)
 		client_socket = MitmOutSocket(client_socket_processor)
 		
 		recv_socket = MitmInSocket(self.rfile)
 		
-		send_socket_formatter = Base64WithEndpointFormatter
-		send_socket_processor = UnformatDataProcessor(send_socket_formatter)
+		send_socket_codec = Base64Codec()
+		send_socket_unformatter = DecodeAndEndpointUnformatter(send_socket_codec)
+		send_socket_processor = UnformatAndRouteByEndpointDataProcessor(send_socket_unformatter)
 		send_socket = MitmOutSocket(send_socket_processor)
 		
 		mitm_socket = MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
