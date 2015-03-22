@@ -20,6 +20,45 @@ ENDPOINT_SERVER = 'S'
 ENDPOINT_CLIENT = 'C'
 MESSAGE_ENDPOINT_SEPARATOR = '-'
 
+KEYS_FILE = "keys"
+
+
+class StringUtils:
+	def __init__(self, string):
+		self.string = string
+	
+	def get_substring(self, before_start, after_end, offset = 0):
+		return self.get_substring_and_end_position(before_start, after_end, offset)[0]
+	
+	def get_substring_and_end_position(self, before_start, after_end, offset):
+		start_position = self.string.find(before_start, offset)
+		if start_position == -1:
+			pass # TODO raise?
+		start_position += len(before_start)
+		end_position = self.string.find(after_end, start_position)
+		if end_position == -1:
+			pass # TODO raise?
+		return self.string[start_position:end_position], end_position + len(after_end)
+
+
+class KeysStorage:
+	__instance = None
+	
+	def __init__(self):
+		self.keys = eval(open(KEYS_FILE).read())
+	
+	@classmethod
+	def instance(cls):
+		if not cls.__instance:
+			cls.__instance = cls()
+		return cls.__instance
+	
+	def get(self, key):
+		return self.keys[key]
+	
+	def check(self, key, value):
+		return self.keys.has_key(key) and self.keys[key] == value
+
 
 class MitmExchanger:
 	__instance = None
@@ -88,22 +127,24 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 			self.send_failure_response(socket)
 	
 	def get_http_request(self, socket):
-		return socket.recv(RECV_BUFFER) # TODO
+		read = socket.recv(RECV_BUFFER)
+		request = read
+		while "\r\n\r\n" not in request and read:
+			read = socket.recv(RECV_BUFFER)
+			request += read
+		return request
 	
 	def check_authentication(self, request):
-		return self.check_http_authentication(request) and self.check_csrf_in_body(request)
-	
-	def check_http_authentication(self, request):
-		return True # TODO
-	
-	def check_csrf_in_body(self, request):
-		return True # TODO
+		request_string = StringUtils(request)
+		csrf = request_string.get_substring("csrf=", "&")
+		password = request_string.get_substring("\r\nAuthorization: Basic ", "\r\n")
+		return KeysStorage.instance().check(csrf, password)
 	
 	def send_ok_response(self, socket):
-		socket.send("ok\n") # TODO
+		socket.send("ok\n")
 	
 	def send_failure_response(self, socket):
-		socket.send("error\n") # TODO
+		socket.send("error\n")
 
 
 class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
@@ -160,7 +201,7 @@ class SslClientRequest:
 	def __init__(self, initial_payload, path, credentials, body):
 		self.initial_payload = initial_payload
 		self.http_request = self.build_http_request(path, credentials, body)
-		self.response = 'client-error' # TODO error?
+		self.response = 'client-error'
 	
 	def run(self):
 		try:
@@ -195,7 +236,7 @@ class SslClientRequest:
 		socket.sendall(self.http_request)
 	
 	def get_response(self, socket):
-		return socket.recv(RECV_BUFFER) # TODO?
+		return socket.recv(RECV_BUFFER)
 	
 	def shutdown_socket(self, socket):
 		socket.close()
@@ -301,14 +342,20 @@ class EndpointRouter:
 
 class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 	def handle(self):
-		path, credentials, body = self.handle_initial_request()
-		self.perform_https_connection(path, credentials, body)
+		try:
+			path, credentials, body = self.handle_initial_request()
+			self.perform_https_connection(path, credentials, body)
+		except:
+			pass
 	
 	def handle_initial_request(self):
 		request = self.rfile.readline()
 		self.sanity_checks(request)
 		path, body = self.split_request(request)
 		csrf = self.get_csrf(body)
+		if not csrf:
+			self.send_error("no csrf found")
+			raise
 		credentials = self.get_credentials(csrf)
 		return path, credentials, body
 	
@@ -346,28 +393,19 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		pass # TODO check post("[^"]", "[^"]");\n and raise exceptions if not match
 	
 	def split_request(self, request):
-		path, end_position = self.get_substring_and_end_position(request, '"', '"', 0)
-		body = self.get_substring(request, '"', '"', end_position)
+		request_string = StringUtils(request)
+		path, end_position = request_string.get_substring_and_end_position('"', '"', 0)
+		body = request_string.get_substring('"', '"', end_position)
 		return path, body
 	
 	def get_csrf(self, body):
-		return self.get_substring(body, "csrf=", "&")
+		return StringUtils(body).get_substring("csrf=", "&")
 	
 	def get_credentials(self, csrf):
-		return "pepe:pito" # TODO read from a file using the csrf
+		return KeysStorage.instance().get(csrf)
 	
-	def get_substring(self, string, before_start, after_end, offset = 0):
-		return self.get_substring_and_end_position(string, before_start, after_end, offset)[0]
-	
-	def get_substring_and_end_position(self, string, before_start, after_end, offset):
-		start_position = string.find(before_start, offset)
-		if start_position == -1:
-			pass # TODO raise?
-		start_position += len(before_start)
-		end_position = string.find(after_end, start_position)
-		if end_position == -1:
-			pass # TODO raise?
-		return string[start_position:end_position], end_position + len(after_end)
+	def send_error(self, message):
+		self.wfile.write(message + "\n")
 
 
 if __name__ == "__main__":
