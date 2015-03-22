@@ -54,7 +54,7 @@ class KeysStorage:
 		return cls.__instance
 	
 	def get(self, key):
-		return self.keys[key]
+		return self.keys.get(key)
 	
 	def check(self, key, value):
 		return self.keys.has_key(key) and self.keys[key] == value
@@ -353,10 +353,10 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		self.sanity_checks(request)
 		path, body = self.split_request(request)
 		csrf = self.get_csrf(body)
-		if not csrf:
-			self.send_error("no csrf found")
-			raise
 		credentials = self.get_credentials(csrf)
+		if not credentials:
+			self.send_error("no valid csrf found")
+			raise
 		return path, credentials, body
 	
 	def perform_https_connection(self, path, credentials, body):
