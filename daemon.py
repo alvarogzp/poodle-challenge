@@ -172,7 +172,7 @@ class SslClientRequest:
 		self.shutdown_socket(ssl_socket)
 	
 	def build_http_request(self, path, credentials, body):
-		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s""" % (path, credentials, body)
+		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s" % (path, credentials, body)
 	
 	def connect_to_server(self):
 		return socket.create_connection(INTERNAL_FORWARD_ENDPOINT)
