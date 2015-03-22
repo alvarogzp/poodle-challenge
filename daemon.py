@@ -159,7 +159,7 @@ class SslClientRequest:
 	def __init__(self, initial_payload, path, credentials, body):
 		self.initial_payload = initial_payload
 		self.http_request = self.build_http_request(path, credentials, body)
-		self.response = '' # TODO error?
+		self.response = 'client-error' # TODO error?
 	
 	def run(self):
 		socket = self.connect_to_server()
