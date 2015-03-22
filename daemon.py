@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-################# TODO STATUS: ahora mismo se conecta el cliente directamente al servidor, hay que crear un servidor que haga el MITM, reenviando el trafico SSL recibido por ambos sockets y enviando el que el cliente del MITM decida
+
 import socket
 import SocketServer
 import ssl
