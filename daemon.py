@@ -112,11 +112,8 @@ class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
 	def handle(self):
 		mitm_key = self.get_mitm_key(self.request)
 		mitm = self.get_mitm(mitm_key)
-		client_socket = self.connect_client_socket()
-		self.forward(self.request, client_socket, mitm)
-	
-	def connect_client_socket(self):
-		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
+		server_socket = self.connect_to_server_socket()
+		self.forward(server_socket, self.request, mitm)
 	
 	def get_mitm_key(self, socket):
 		mitm_key = int(socket.recv(RECV_BUFFER))
@@ -125,6 +122,9 @@ class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
 	
 	def get_mitm(self, mitm_key):
 		return MitmExchanger.instance().pop(mitm_key)
+	
+	def connect_to_server_socket(self):
+		return socket.create_connection(INTERNAL_SSL_ENDPOINT)
 	
 	def forward(self, server_socket, client_socket, mitm):
 		forwarder_from_server = SocketStreamForwarder(server_socket, mitm.server_out_socket).forward()
@@ -295,9 +295,9 @@ class EndpointRouter:
 	
 	def get(self, endpoint):
 		if endpoint == ENDPOINT_SERVER:
-			return self.server_socket
-		elif endpoint == ENDPOINT_CLIENT:
 			return self.client_socket
+		elif endpoint == ENDPOINT_CLIENT:
+			return self.server_socket
 
 
 class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
