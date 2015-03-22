@@ -227,7 +227,10 @@ class MitmOutSocket:
 		self.processor = processor
 	
 	def sendall(self, string):
-		self.processor.process(string)
+		try:
+			self.processor.process(string)
+		except:
+			pass
 
 
 class FormatDataProcessor:
