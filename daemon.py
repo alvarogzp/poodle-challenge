@@ -146,10 +146,13 @@ class SocketStreamForwarder:
 		return self
 	
 	def forward_loop(self):
-		read = self.in_socket.recv(RECV_BUFFER)
-		while read:
-			self.out_socket.sendall(read)
+		try:
 			read = self.in_socket.recv(RECV_BUFFER)
+			while read:
+				self.out_socket.sendall(read)
+				read = self.in_socket.recv(RECV_BUFFER)
+		except:
+			pass
 	
 	def wait(self):
 		self.thread.join()
@@ -227,10 +230,7 @@ class MitmOutSocket:
 		self.processor = processor
 	
 	def sendall(self, string):
-		try:
-			self.processor.process(string)
-		except:
-			pass
+		self.processor.process(string)
 
 
 class FormatDataProcessor:
