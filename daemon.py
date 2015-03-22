@@ -66,20 +66,18 @@ class ThreadedTCPServer(SocketServer.ThreadingTCPServer):
 
 class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 	def handle(self):
-		self.ssl_socket = self.wrap_with_ssl_socket(self.request)
-		handshake_completed = self.handle_ssl_handshake(self.ssl_socket)
-		if handshake_completed:
+		try:
+			self.ssl_socket = self.wrap_with_ssl_socket(self.request)
+			self.handle_ssl_handshake(self.ssl_socket)
 			self.handle_http_request(self.ssl_socket)
+		except:
+			pass
 	
 	def wrap_with_ssl_socket(self, socket):
 		return ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True, cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO force cbc block cipher
 	
 	def handle_ssl_handshake(self, ssl_socket):
-		try:
-			ssl_socket.do_handshake()
-			return True
-		except:
-			return False
+		ssl_socket.do_handshake()
 	
 	def handle_http_request(self, socket):
 		request = self.get_http_request(socket)
@@ -165,14 +163,16 @@ class SslClientRequest:
 		self.response = 'client-error' # TODO error?
 	
 	def run(self):
-		socket = self.connect_to_server()
-		self.send_initial_payload(socket, self.initial_payload)
-		ssl_socket = self.wrap_with_ssl_socket(socket)
-		valid_handshake = self.perform_ssl_handshake(ssl_socket)
-		if valid_handshake:
+		try:
+			socket = self.connect_to_server()
+			self.send_initial_payload(socket, self.initial_payload)
+			ssl_socket = self.wrap_with_ssl_socket(socket)
+			self.perform_ssl_handshake(ssl_socket)
 			self.send_request(ssl_socket)
 			self.response = self.get_response(ssl_socket)
-		self.shutdown_socket(ssl_socket)
+			self.shutdown_socket(ssl_socket)
+		except:
+			pass
 	
 	def build_http_request(self, path, credentials, body):
 		return "GET %s HTTP/1.0\r\nAuthorization: Basic %s\r\n\r\n%s" % (path, credentials, body)
@@ -189,11 +189,7 @@ class SslClientRequest:
 		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
 	
 	def perform_ssl_handshake(self, ssl_socket):
-		try:
-			ssl_socket.do_handshake()
-			return True
-		except:
-			return False
+		ssl_socket.do_handshake()
 	
 	def send_request(self, socket):
 		socket.sendall(self.http_request)
