@@ -14,6 +14,7 @@ RECV_BUFFER = 4096
 KILL_THREADS_WHEN_MAIN_ENDS = True
 
 SSL_VERSION = ssl.PROTOCOL_SSLv3
+CIPHER_ALGORITHM = "AES256-SHA"
 
 MITM_KEY_RECEIVED = "ok"
 ENDPOINT_SERVER = 'S'
@@ -32,12 +33,8 @@ class StringUtils:
 	
 	def get_substring_and_end_position(self, before_start, after_end, offset):
 		start_position = self.string.find(before_start, offset)
-		if start_position == -1:
-			pass # TODO raise?
 		start_position += len(before_start)
 		end_position = self.string.find(after_end, start_position)
-		if end_position == -1:
-			pass # TODO raise?
 		return self.string[start_position:end_position], end_position + len(after_end)
 
 
@@ -113,7 +110,7 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 			pass
 	
 	def wrap_with_ssl_socket(self, socket):
-		return ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True, cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO force cbc block cipher
+		return ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True, cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False, ciphers=CIPHER_ALGORITHM)
 	
 	def handle_ssl_handshake(self, ssl_socket):
 		ssl_socket.do_handshake()
@@ -227,7 +224,7 @@ class SslClientRequest:
 		assert ack == MITM_KEY_RECEIVED
 	
 	def wrap_with_ssl_socket(self, socket):
-		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem", ssl_version=SSL_VERSION, do_handshake_on_connect=False) # TODO include certificate file in ca_certs param, force cbc block cipher
+		return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem", ssl_version=SSL_VERSION, do_handshake_on_connect=False, ciphers=CIPHER_ALGORITHM)
 	
 	def perform_ssl_handshake(self, ssl_socket):
 		ssl_socket.do_handshake()
@@ -418,8 +415,7 @@ if __name__ == "__main__":
 	public_server = ThreadedTCPServer(PUBLIC_ENDPOINT, PublicServerRequestHandler)
 	public_server.start_foreground()
 	
-	# TODO
-	
+	public_server.shutdown()
 	forward_server.shutdown()
 	ssl_server.shutdown()
 
