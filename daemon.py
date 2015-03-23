@@ -22,7 +22,7 @@ ENDPOINT_SERVER = 'S'
 ENDPOINT_CLIENT = 'C'
 MESSAGE_ENDPOINT_SEPARATOR = '-'
 
-KEYS_FILE = "keys"
+TOKENS_FILE = "tokens"
 
 
 class StringUtils:
@@ -39,11 +39,11 @@ class StringUtils:
 		return self.string[start_position:end_position], end_position + len(after_end)
 
 
-class KeysStorage:
+class TokensStorage:
 	__instance = None
 	
 	def __init__(self):
-		self.keys = eval(open(KEYS_FILE).read())
+		self.tokens = eval(open(TOKENS_FILE).read())
 	
 	@classmethod
 	def instance(cls):
@@ -52,10 +52,10 @@ class KeysStorage:
 		return cls.__instance
 	
 	def get(self, key):
-		return self.keys.get(key)
+		return self.tokens.get(key)
 	
 	def check(self, key, value):
-		return self.keys.has_key(key) and self.keys[key] == value
+		return self.tokens.has_key(key) and self.tokens[key] == value
 
 
 class MitmExchanger:
@@ -136,7 +136,7 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
 		request_string = StringUtils(request)
 		csrf = request_string.get_substring("csrf=", "&")
 		password = request_string.get_substring("\r\nAuthorization: Basic ", "\r\n")
-		return KeysStorage.instance().check(csrf, password)
+		return TokensStorage.instance().check(csrf, password)
 	
 	def send_ok_response(self, socket):
 		socket.send("ok\n")
@@ -399,7 +399,7 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		return StringUtils(body).get_substring("csrf=", "&")
 	
 	def get_credentials(self, csrf):
-		return KeysStorage.instance().get(csrf)
+		return TokensStorage.instance().get(csrf)
 	
 	def send_error(self, message):
 		self.wfile.write(message + "\n")
