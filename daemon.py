@@ -5,6 +5,7 @@ import SocketServer
 import ssl
 import threading
 import sys
+import re
 
 PUBLIC_ENDPOINT = ('', 4747)
 
@@ -198,7 +199,7 @@ class SslClientRequest:
 	def __init__(self, initial_payload, path, credentials, body):
 		self.initial_payload = initial_payload
 		self.http_request = self.build_http_request(path, credentials, body)
-		self.response = 'client-error'
+		self.response = 'client-error\n'
 	
 	def run(self):
 		try:
@@ -357,8 +358,6 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		return path, credentials, body
 	
 	def perform_https_connection(self, path, credentials, body):
-		# TODO create a factory for this
-		
 		server_socket_codec = Base64Codec()
 		server_socket_formatter = EncodeAndEndpointFormatter(ENDPOINT_SERVER, server_socket_codec)
 		server_socket_action = self.wfile.write
@@ -379,7 +378,6 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		send_socket = MitmOutSocket(send_socket_processor)
 		
 		mitm_socket = MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
-		
 		mitm_socket_key = MitmExchanger.instance().put(mitm_socket)
 		
 		ssl_client = SslClientRequest(str(mitm_socket_key), path, credentials, body)
@@ -387,7 +385,9 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
 		self.wfile.write(ssl_client.response)
 	
 	def sanity_checks(self, request):
-		pass # TODO check post("[^"]", "[^"]");\n and raise exceptions if not match
+		if not re.compile('^post\("[^"]+", ?"[^"]+"\);$').match(request):
+			self.send_error("invalid request")
+			raise
 	
 	def split_request(self, request):
 		request_string = StringUtils(request)
