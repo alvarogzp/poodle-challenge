@@ -11,7 +11,7 @@ ORIGIN_CLIENT = "C"
 ORIGIN_SEPARATOR = "-"
 RESPONSE_SUCCESSFUL = "ok\n"
 
-PADDING_LAMBDA = 4 # To make request end on block boundary
+PADDING_LAMBDA = 13 # To make request end on block boundary
 
 PADDING_CHAR = "a"
 DECRYPT_BLOCK_FROM_LAST = 5 # Decrypt the 5th block counting from last
