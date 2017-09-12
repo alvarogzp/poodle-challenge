@@ -122,4 +122,4 @@ If it does, then the plaintext last byte of the selected block can be easily obt
 
 By modifying the path and body length simultaneously so that the request still have a full padding block and selecting the proper block to decrypt its final byte, you can get adjacent plaintext bytes, eventually building the request that is being made.
 
-Once the byte where credentials start is known, it can be automated to get the credentials and end when a `\r\n` is found. 
+Once the byte where credentials start is known, it can be automated to get the credentials and end when a `\r\n` is found.
