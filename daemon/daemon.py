@@ -7,16 +7,13 @@ import threading
 import sys
 import re
 
-from daemon.mitm.mitm.core.request_handler.with_destination import set_destination_endpoint
-from daemon.mitm.mitm.extra.data_processor import server_base64_formatter, client_base64_formatter, \
-    base64_decode_and_endpoint_unformatter
-from daemon.mitm.mitm.extra.data_processor.in_socket.file import FileInSocket
-from daemon.mitm.mitm.extra.data_processor.out_socket import DataProcessorOutSocket
-from daemon.mitm.mitm.extra.data_processor.out_socket.data_processor.format import FormatAndDoDataProcessor
-from daemon.mitm.mitm.extra.data_processor.out_socket.data_processor.unformat_and_route import \
-    UnformatAndRouteByEndpointDataProcessor
-from daemon.mitm.mitm.extra.socket_aggregator.request_handler import BaseAggregatorMitmRequestHandler
-from daemon.mitm.mitm.extra.socket_aggregator.socket_aggregator import MitmSocketAggregator
+sys.path.append("mitm")
+
+from mitm.core import set_destination_endpoint
+from mitm.extra.data_processor import server_base64_formatter, client_base64_formatter, \
+    base64_decode_and_endpoint_unformatter, FileInSocket, DataProcessorOutSocket, \
+    FormatAndDoDataProcessor, UnformatAndRouteByEndpointDataProcessor
+from mitm.extra.socket_aggregator import BaseAggregatorMitmRequestHandler, MitmSocketAggregator
 
 PUBLIC_ENDPOINT = ('', 4747)
 
