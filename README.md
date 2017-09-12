@@ -59,3 +59,46 @@ The CSRF token you will have to use on every request you send to the MiTM.
 ### Output
 
 The `user:password` string encoded in base64 (that is, as the client is sending it to the server).
+
+
+## Instructions for solving
+
+In order to solve the challenge, you need to contact the MiTM. Currently, we have no one publicly deployed, but you can run it locally.
+
+Just execute the `daemon/daemon.py` script with a Python 2 interpreter with the working directory set on `daemon/`. It will listen for incoming connections on the `4747` port.
+
+Then pick one CSRF from the `test/` or `submit/` `inputX` files, and try to solve it!
+
+You have achieved it when you can successfully obtain the corresponding `outputX` content from the inputX one, using only the MiTM service to get it.
+
+NOTE: If the daemon does not start, see the [Daemon caveats](#daemon-caveats) section below for troubleshooting.
+
+Do not keep reading if you are planning to solve the challenge, otherwise you may end up with key information for solving and it will be less challenging.
+
+
+---
+---
+
+
+## Repository structure
+
+First, there is a `daemon/` directory. There is all needed to run the challenge server.
+
+The `daemon.py` contains the code that simulates the MiTM. It accepts connections on a public port, and performs a fake client-server communication with a proxy in the middle that allows external modifications to the communication data.
+
+The `.pem` files contain a fake NSA certificate and private key to make it more realistic.
+
+And the `tokens` file allows to map CSRF tokens to credentials.
+
+The `test/` and `submit/` directories contain _input -> output_ mappings to allow automatic validation of challenge submissions. They, along with the daemon tokens file can be automatically generated with random values using `gen_inputs_outputs_tokens.sh`.
+
+Finally, the `solution/` directory contain the proposed solution that were created while developing the challenge.
+
+
+## Daemon caveats
+
+In order for the challenge to be feasibly solved as it was proposed, the daemon part must be run under the following conditions:
+
+ - The Python interpreter must have been compiled with an OpenSSL library with SSLv3 support enabled. Otherwise, it will fail to properly startup.
+
+ - OpenSSL should negotiate a `null` compression algorithm (you can check it by running a network analyzer on the loopback interface). Although with a compression algorithm it may still be resolved, it would be much more complex (you would need to know the full data being sent, and its length may vary in unexpected ways). While developing the challenge, the Python interpreter used did not use compression, but at the time of writing this, it seems to negotiate to DEFLATE, and I have not yet found an easy way to disable it.
