@@ -102,3 +102,24 @@ In order for the challenge to be feasibly solved as it was proposed, the daemon 
  - The Python interpreter must have been compiled with an OpenSSL library with SSLv3 support enabled. Otherwise, it will fail to properly startup.
 
  - OpenSSL should negotiate a `null` compression algorithm (you can check it by running a network analyzer on the loopback interface). Although with a compression algorithm it may still be resolved, it would be much more complex (you would need to know the full data being sent, and its length may vary in unexpected ways). While developing the challenge, the Python interpreter used did not use compression, but at the time of writing this, it seems to negotiate to DEFLATE, and I have not yet found an easy way to disable it.
+
+
+---
+---
+
+
+## Context and explanation
+
+This challenge was made for inclusion into the Tuenti Challenge 2015, but it finally did not get into it.
+
+It exploits the [POODLE](https://en.wikipedia.org/wiki/POODLE) vulnerability of SSLv3 to retrieve the HTTP Authorization header (it could have been a cookie also). See also [this](https://www.openssl.org/~bodo/ssl-poodle.pdf) for technical details.
+
+In order to do it, first the request length must be adjusted to have a full block of padding at the end. This can be achieved by modifying the request path length and looking at the SSL handshake to see when the final data packet gets larger.
+
+Then, using the technique described in the previous link, the last plaintext byte of a given encrypted block can be obtained by replacing the full-padding block with the selected block and seeing if the server accepts it.
+
+If it does, then the plaintext last byte of the selected block can be easily obtained by XORing the encrypted byte with the corresponding byte on the previous-to-last block and the corresponding byte on the previous-to-selected block. If the server rejects the data, then it can be tried again until it is accepted (there is a 1/256 probability).
+
+By modifying the path and body length simultaneously so that the request still have a full padding block and selecting the proper block to decrypt its final byte, you can get adjacent plaintext bytes, eventually building the request that is being made.
+
+Once the byte where credentials start is known, it can be automated to get the credentials and end when a `\r\n` is found. 
