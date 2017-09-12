@@ -1,12 +1,12 @@
 ## Challenge description
 
-You are a cryptohacker working for a foreign country security agency. You have currently been assigned to a classified project whose full extent you do not know. Your part consist on accessing NSA private network to steal classified information.
+You are a cryptohacker working for a foreign country security agency. You have currently been assigned to a classified project whose full extent you do not know. Your job consist on accessing NSA private network to steal classified information.
 
-It may sound a hard task, but you are not alone. Your team has already done a good job and have penetrated into several security layers of the NSA network. But they are stuck, and to go further they need to find valid credentials from someone working inside to be able to authenticate themselves and gain more privileges.
+It may sound a hard task, but you are not alone. Your team has already done a good job and have penetrated into several security layers of the NSA network. But they are stuck, and to go further they need to find valid credentials from someone working inside to be able to authenticate as him and gain more privileges.
 
 They have found a server which seems to provide web access via HTTPS to some kind of credentials-protected storage. The credentials are checked using [Basic HTTP authentication](https://en.wikipedia.org/wiki/Basic_access_authentication). And, the most interesting part is that the server is still using SSLv3! :scream: (maybe an old server they forgot to update).
 
-Your team has also found a desktop computer which is actively talking to that server (ie., sending valid credentials). They have also managed to install a man-in-the-middle (MiTM) software in a router in the path between the computer and the target server.
+Your team has also found a desktop computer which is actively talking to that server (ie., sending valid credentials). They have also managed to install a man-in-the-middle (MiTM) software in a router in the path between that computer and the target server.
 
 Now, the only remaining thing that prevents them from getting the credentials is the SSL layer. And there is where you come to action.
 
@@ -15,11 +15,11 @@ Using the MiTM software, they have been able to inject JavaScript code into an i
 So, your job is to get the credentials from the SSLv3 encrypted traffic between the browser and the server. Will you be up to it?
 
 
-### MiTM details
+#### MiTM details
 
 You are only able to perform connections to the MiTM software. That software expects first of all a request to be injected into the client browser. It only support POST requests. You have to specify them in the following format:
 
-    post("/request/path", "csrf=csrf_token&any_query_string");\n
+    post("/request/path", "csrf=csrf_token&body_query_string");\n
 
 The request path and body can be chosen freely (but you have to include a CSRF token on the body, read below about it).
 
@@ -41,9 +41,9 @@ As you can see, the format is the same as for the incoming data. So, if you do n
 
 If the SSL handshake goes without error, you will get an `ok\n` message.
 
-You can get some error messages from the MiTM, though. If the initial request is not properly formatted, or you do not add a valid CSRF token its body, the request will not be injected and you will be properly notified.
+You can get some error messages from the MiTM, though. If the initial request is not properly formatted, or you do not add a valid CSRF token to its body, the request will not be injected and you will be properly notified.
 
-If there is an error in the SSL handshake you will get a `client-error\n` message.
+If there is an error in the SSL handshake, you will get a `client-error\n` message.
 
 
 ### CSRF token
@@ -84,7 +84,7 @@ Do not keep reading if you are planning to solve the challenge, otherwise you ma
 
 First, there is a `daemon/` directory. There is all needed to run the challenge server.
 
-The `daemon.py` contains the code that simulates the MiTM. It accepts connections on a public port, and performs a fake client-server communication with a proxy in the middle that allows external modifications to the communication data.
+The `daemon.py` contains the code that simulates the MiTM. It accepts connections on a public port, and performs a fake client-server communication with a proxy in the middle that allows external modifications to the exchanged data.
 
 The `.pem` files contain a fake NSA certificate and private key to make it more realistic.
 
@@ -101,7 +101,7 @@ In order for the challenge to be feasibly solved as it was proposed, the daemon 
 
  - The Python interpreter must have been compiled with an OpenSSL library with SSLv3 support enabled. Otherwise, it will fail to properly startup.
 
- - OpenSSL should negotiate a `null` compression algorithm (you can check it by running a network analyzer on the loopback interface). Although with a compression algorithm it may still be resolved, it would be much more complex (you would need to know the full data being sent, and its length may vary in unexpected ways). While developing the challenge, the Python interpreter used did not use compression, but at the time of writing this, it seems to negotiate to DEFLATE, and I have not yet found an easy way to disable it.
+ - OpenSSL should negotiate a `null` compression algorithm (you can check it by running a network analyzer on the loopback interface). Although with a compression algorithm it may still be resolved, it would be much more complex (you would need to know the full data being sent, and even with that, the compressed length may vary in unexpected ways). While developing the challenge, the Python interpreter used did not use compression, but at the time of writing this, it seems to negotiate to DEFLATE, and I have not yet found an easy way to disable it.
 
 
 ---
@@ -112,11 +112,11 @@ In order for the challenge to be feasibly solved as it was proposed, the daemon 
 
 This challenge was made for inclusion into the Tuenti Challenge 2015, but it finally did not get into it.
 
-It exploits the [POODLE](https://en.wikipedia.org/wiki/POODLE) vulnerability of SSLv3 to retrieve the HTTP Authorization header (it could have been a cookie also). See also [this](https://www.openssl.org/~bodo/ssl-poodle.pdf) for technical details.
+It exploits the [POODLE](https://en.wikipedia.org/wiki/POODLE) vulnerability of SSLv3 to retrieve the HTTP Authorization header (it could have been a cookie also). See also [this](https://www.openssl.org/~bodo/ssl-poodle.pdf) for technical details of the vulnerability.
 
 In order to do it, first the request length must be adjusted to have a full block of padding at the end. This can be achieved by modifying the request path length and looking at the SSL handshake to see when the final data packet gets larger.
 
-Then, using the technique described in the previous link, the last plaintext byte of a given encrypted block can be obtained by replacing the full-padding block with the selected block and seeing if the server accepts it.
+Then, using the technique described in the previous link, the last plaintext byte of a given encrypted block can be obtained by replacing the full-padding block with a selected block and seeing if the server accepts it.
 
 If it does, then the plaintext last byte of the selected block can be easily obtained by XORing the encrypted byte with the corresponding byte on the previous-to-last block and the corresponding byte on the previous-to-selected block. If the server rejects the data, then it can be tried again until it is accepted (there is a 1/256 probability).
 
