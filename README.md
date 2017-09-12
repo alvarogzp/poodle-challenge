@@ -1,16 +1,18 @@
 ## Challenge description
 
-You are a cryptohacker working for a foreign country security agency. Your mission is to infiltrate on a NSA data repository cluster to search for a specific USA-government classified document which is of interest to your country.
+You are a cryptohacker working for a foreign country security agency. You have currently been assigned to a classified project whose full extent you do not know. Your part consist on accessing NSA private network to steal classified information.
 
-It may sound a hard task, but you are not alone. Your team has already done a good job and have penetrated into several security layers of the NSA network. They have managed to find a server that looks like an endpoint of some kind of document storage.
+It may sound a hard task, but you are not alone. Your team has already done a good job and have penetrated into several security layers of the NSA network. But they are stuck, and to go further they need to find valid credentials from someone working inside to be able to authenticate themselves and gain more privileges.
 
-This server has a service which is accessible via SSL and seems to provide access to the stored documents. Unfortunately, the access is protected by [HTTP authentication](https://en.wikipedia.org/wiki/Basic_access_authentication). But, the most interesting part is that the server is using SSLv3! :scream: (maybe you should give them more money, Mr. Trump ;)
+They have found a server which seems to provide web access via HTTPS to some kind of credentials-protected storage. The credentials are checked using [Basic HTTP authentication](https://en.wikipedia.org/wiki/Basic_access_authentication). And, the most interesting part is that the server is still using SSLv3! :scream: (maybe an old server they forgot to update).
 
-Your team has also found a desktop computer with a web browser opened which is actively using the service (ie., it has valid credentials). They have also managed to install a man-in-the-middle software in a router in the path between the computer and the target server.
+Your team has also found a desktop computer which is actively talking to that server (ie., sending valid credentials). They have also managed to install a man-in-the-middle (MiTM) software in a router in the path between the computer and the target server.
 
-Using that software, they have been able to inject JavaScript code into an insecure web page on the client browser. That JavaScript can perform custom [XHR requests](https://en.wikipedia.org/wiki/XMLHttpRequest) to the target server (with the authentication header being added automatically by the browser).
+Now, the only remaining thing that prevents them from getting the credentials is the SSL layer. And there is where you come to action.
 
-So, they now need your help. You have told them before about vulnerabilities found on SSLv3 like [POODLE](https://en.wikipedia.org/wiki/POODLE). Would you be able to put that in practice and give them the credentials they need?
+Using the MiTM software, they have been able to inject JavaScript code into an insecure web page on the client browser. That JavaScript can perform custom [XHR requests](https://en.wikipedia.org/wiki/XMLHttpRequest) to the target server (with the authentication header being added automatically by the browser).
+
+So, your job is to get the credentials from the SSLv3 encrypted traffic between the browser and the server. Will you be up to it?
 
 
 ### MiTM details
