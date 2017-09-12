@@ -7,6 +7,17 @@ import threading
 import sys
 import re
 
+from daemon.mitm.mitm.core.request_handler.with_destination import set_destination_endpoint
+from daemon.mitm.mitm.extra.data_processor import server_base64_formatter, client_base64_formatter, \
+    base64_decode_and_endpoint_unformatter
+from daemon.mitm.mitm.extra.data_processor.in_socket.file import FileInSocket
+from daemon.mitm.mitm.extra.data_processor.out_socket import DataProcessorOutSocket
+from daemon.mitm.mitm.extra.data_processor.out_socket.data_processor.format import FormatAndDoDataProcessor
+from daemon.mitm.mitm.extra.data_processor.out_socket.data_processor.unformat_and_route import \
+    UnformatAndRouteByEndpointDataProcessor
+from daemon.mitm.mitm.extra.socket_aggregator.request_handler import BaseAggregatorMitmRequestHandler
+from daemon.mitm.mitm.extra.socket_aggregator.socket_aggregator import MitmSocketAggregator
+
 PUBLIC_ENDPOINT = ('', 4747)
 
 INTERNAL_SSL_ENDPOINT = ('127.0.0.1', 65186)
@@ -147,12 +158,13 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
         socket.send("error\n")
 
 
-class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
-    def handle(self):
+set_destination_endpoint(INTERNAL_SSL_ENDPOINT)
+
+
+class MitmServerRequestHandler(BaseAggregatorMitmRequestHandler):
+    def get_mitm_socket_aggregator(self):
         mitm_key = self.get_mitm_key(self.request)
-        mitm = self.get_mitm(mitm_key)
-        server_socket = self.connect_to_server_socket()
-        self.forward(server_socket, self.request, mitm)
+        return self.get_mitm(mitm_key)
 
     def get_mitm_key(self, socket):
         mitm_key = int(socket.recv(RECV_BUFFER))
@@ -161,41 +173,6 @@ class MitmServerRequestHandler(SocketServer.BaseRequestHandler):
 
     def get_mitm(self, mitm_key):
         return MitmExchanger.instance().pop(mitm_key)
-
-    def connect_to_server_socket(self):
-        return socket.create_connection(INTERNAL_SSL_ENDPOINT)
-
-    def forward(self, server_socket, client_socket, mitm):
-        forwarder_from_server = SocketStreamForwarder(server_socket, mitm.server_out_socket).forward()
-        forwarder_from_client = SocketStreamForwarder(client_socket, mitm.client_out_socket).forward()
-        forwarder_from_mitm = SocketStreamForwarder(mitm.recv_socket,
-                                                    mitm.send_socket(server_socket, client_socket)).forward()
-        forwarder_from_server.wait()
-        forwarder_from_client.wait()
-        forwarder_from_mitm.wait()
-
-
-class SocketStreamForwarder:
-    def __init__(self, in_socket, out_socket):
-        self.in_socket = in_socket
-        self.out_socket = out_socket
-
-    def forward(self):
-        self.thread = Thread(target=self.forward_loop)
-        self.thread.start()
-        return self
-
-    def forward_loop(self):
-        try:
-            read = self.in_socket.recv(RECV_BUFFER)
-            while read:
-                self.out_socket.sendall(read)
-                read = self.in_socket.recv(RECV_BUFFER)
-        except:
-            pass
-
-    def wait(self):
-        self.thread.join()
 
 
 class SslClientRequest:
@@ -244,104 +221,6 @@ class SslClientRequest:
         socket.close()
 
 
-class MitmSocketAggregator:
-    def __init__(self, server_socket, client_socket, recv_socket, send_socket):
-        self.server_out_socket = server_socket
-        self.client_out_socket = client_socket
-        self.recv_socket = recv_socket
-        self._send_socket = send_socket
-
-    def send_socket(self, server_socket, client_socket):
-        self._send_socket.processor.set_router(EndpointRouter(server_socket, client_socket))
-        return self._send_socket
-
-
-class MitmInSocket:
-    def __init__(self, rfile):
-        self.rfile = rfile
-
-    def recv(self, bufsize):
-        return self.rfile.readline()
-
-
-class MitmOutSocket:
-    def __init__(self, processor):
-        self.processor = processor
-
-    def sendall(self, string):
-        self.processor.process(string)
-
-
-class FormatDataProcessor:
-    def __init__(self, formatter, action):
-        self.formatter = formatter
-        self.action = action
-
-    def process(self, string):
-        formatted_data = self.formatter.format(string)
-        self.action(formatted_data)
-
-
-class EncodeAndEndpointFormatter:
-    def __init__(self, endpoint, codec):
-        self.endpoint = endpoint
-        self.codec = codec
-
-    def format(self, string):
-        return self.endpoint + MESSAGE_ENDPOINT_SEPARATOR + self.codec.encode(string) + '\n'
-
-
-class DecodeAndEndpointUnformatter:
-    def __init__(self, codec):
-        self.codec = codec
-
-    def unformat(self, string):
-        string = self.remove_trailing_newline(string)
-        endpoint, encoded_string = self.split_by_separator(string)
-        decoded_string = self.codec.decode(encoded_string)
-        return (endpoint, decoded_string)
-
-    def remove_trailing_newline(self, string):
-        if string[-1] == '\n':
-            string = string[:-1]
-        return string
-
-    def split_by_separator(self, string):
-        return string.split(MESSAGE_ENDPOINT_SEPARATOR, 1)
-
-
-class Base64Codec:
-    def encode(self, string):
-        return string.encode("base64").replace("\n", "")
-
-    def decode(self, string):
-        return string.decode("base64")
-
-
-class UnformatAndRouteByEndpointDataProcessor:
-    def __init__(self, unformatter):
-        self.unformatter = unformatter
-
-    def set_router(self, router):
-        self.router = router
-
-    def process(self, string):
-        endpoint, text = self.unformatter.unformat(string)
-        self.router.get(endpoint).sendall(text)
-
-
-class EndpointRouter:
-    def __init__(self, server_socket, client_socket):
-        self.server_socket = server_socket
-        self.client_socket = client_socket
-
-    def get(self, endpoint):
-        if endpoint == ENDPOINT_SERVER:
-            return self.client_socket
-        elif endpoint == ENDPOINT_CLIENT:
-            return self.server_socket
-
-
 class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
     def handle(self):
         try:
@@ -362,24 +241,21 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
         return path, credentials, body
 
     def perform_https_connection(self, path, credentials, body):
-        server_socket_codec = Base64Codec()
-        server_socket_formatter = EncodeAndEndpointFormatter(ENDPOINT_SERVER, server_socket_codec)
+        server_socket_formatter = server_base64_formatter
         server_socket_action = self.wfile.write
-        server_socket_processor = FormatDataProcessor(server_socket_formatter, server_socket_action)
-        server_socket = MitmOutSocket(server_socket_processor)
+        server_socket_processor = FormatAndDoDataProcessor(server_socket_formatter, server_socket_action)
+        server_socket = DataProcessorOutSocket(server_socket_processor)
 
-        client_socket_codec = Base64Codec()
-        client_socket_formatter = EncodeAndEndpointFormatter(ENDPOINT_CLIENT, client_socket_codec)
+        client_socket_formatter = client_base64_formatter
         client_socket_action = self.wfile.write
-        client_socket_processor = FormatDataProcessor(client_socket_formatter, client_socket_action)
-        client_socket = MitmOutSocket(client_socket_processor)
+        client_socket_processor = FormatAndDoDataProcessor(client_socket_formatter, client_socket_action)
+        client_socket = DataProcessorOutSocket(client_socket_processor)
 
-        recv_socket = MitmInSocket(self.rfile)
+        recv_socket = FileInSocket(self.rfile)
 
-        send_socket_codec = Base64Codec()
-        send_socket_unformatter = DecodeAndEndpointUnformatter(send_socket_codec)
+        send_socket_unformatter = base64_decode_and_endpoint_unformatter
         send_socket_processor = UnformatAndRouteByEndpointDataProcessor(send_socket_unformatter)
-        send_socket = MitmOutSocket(send_socket_processor)
+        send_socket = DataProcessorOutSocket(send_socket_processor)
 
         mitm_socket = MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
         mitm_socket_key = MitmExchanger.instance().put(mitm_socket)
