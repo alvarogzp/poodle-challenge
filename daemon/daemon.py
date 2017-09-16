@@ -105,7 +105,6 @@ server_ssl_context = ssl.SSLContext(SSL_VERSION)
 server_ssl_context.verify_mode = ssl.CERT_NONE
 server_ssl_context.load_cert_chain("cert.pem", "certkey.pem")
 server_ssl_context.set_ciphers(CIPHER_ALGORITHM)
-# Fix: disable compression to have predictable ciphered output (works only on python 2.7.9+)
 server_ssl_context.options |= getattr(ssl, "OP_NO_COMPRESSION", 0)
 
 
