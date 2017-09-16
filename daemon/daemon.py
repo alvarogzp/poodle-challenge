@@ -9,11 +9,8 @@ import re
 
 sys.path.append("mitm")
 
-from mitm.core import set_destination_endpoint
-from mitm.extra.data_processor import server_base64_formatter, client_base64_formatter, \
-    base64_decode_and_endpoint_unformatter, FileInSocket, DataProcessorOutSocket, \
-    FormatAndDoDataProcessor, UnformatAndRouteByEndpointDataProcessor
-from mitm.extra.socket_aggregator import BaseAggregatorMitmRequestHandler, MitmSocketAggregator
+import mitm
+
 
 PUBLIC_ENDPOINT = ('', 4747)
 
@@ -155,10 +152,10 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
         socket.send("error\n")
 
 
-set_destination_endpoint(INTERNAL_SSL_ENDPOINT)
+mitm.set_destination_endpoint(INTERNAL_SSL_ENDPOINT)
 
 
-class MitmServerRequestHandler(BaseAggregatorMitmRequestHandler):
+class MitmServerRequestHandler(mitm.BaseAggregatorMitmRequestHandler):
     def get_mitm_socket_aggregator(self):
         mitm_key = self.get_mitm_key(self.request)
         return self.get_mitm(mitm_key)
@@ -238,23 +235,23 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
         return path, credentials, body
 
     def perform_https_connection(self, path, credentials, body):
-        server_socket_formatter = server_base64_formatter
+        server_socket_formatter = mitm.server_base64_formatter
         server_socket_action = self.wfile.write
-        server_socket_processor = FormatAndDoDataProcessor(server_socket_formatter, server_socket_action)
-        server_socket = DataProcessorOutSocket(server_socket_processor)
+        server_socket_processor = mitm.FormatAndDoDataProcessor(server_socket_formatter, server_socket_action)
+        server_socket = mitm.DataProcessorOutSocket(server_socket_processor)
 
-        client_socket_formatter = client_base64_formatter
+        client_socket_formatter = mitm.client_base64_formatter
         client_socket_action = self.wfile.write
-        client_socket_processor = FormatAndDoDataProcessor(client_socket_formatter, client_socket_action)
-        client_socket = DataProcessorOutSocket(client_socket_processor)
+        client_socket_processor = mitm.FormatAndDoDataProcessor(client_socket_formatter, client_socket_action)
+        client_socket = mitm.DataProcessorOutSocket(client_socket_processor)
 
-        recv_socket = FileInSocket(self.rfile)
+        recv_socket = mitm.FileInSocket(self.rfile)
 
-        send_socket_unformatter = base64_decode_and_endpoint_unformatter
-        send_socket_processor = UnformatAndRouteByEndpointDataProcessor(send_socket_unformatter)
-        send_socket = DataProcessorOutSocket(send_socket_processor)
+        send_socket_unformatter = mitm.base64_decode_and_endpoint_unformatter
+        send_socket_processor = mitm.UnformatAndRouteByEndpointDataProcessor(send_socket_unformatter)
+        send_socket = mitm.DataProcessorOutSocket(send_socket_processor)
 
-        mitm_socket = MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
+        mitm_socket = mitm.MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
         mitm_socket_key = MitmExchanger.instance().put(mitm_socket)
 
         ssl_client = SslClientRequest(str(mitm_socket_key), path, credentials, body)
