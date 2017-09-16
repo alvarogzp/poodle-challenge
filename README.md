@@ -97,11 +97,11 @@ Finally, the `solution/` directory contain the proposed solution that were creat
 
 ## Daemon caveats
 
-In order for the challenge to be feasibly solved as it was proposed, the daemon part must be run under the following conditions:
+In order for the challenge to be feasibly solved as it was proposed, the daemon script must be run under the following conditions:
 
- - The Python interpreter must have been compiled with an OpenSSL library with SSLv3 support enabled. Otherwise, it will fail to properly startup.
+ - The Python interpreter must have been compiled with SSLv3 support enabled. Otherwise, it will fail to properly startup. Modern versions ship with SSLv3 disabled for security reasons. If it seems to be your case, you might need to compile Python for yourself (or try to run it on an older operating system version).
 
- - OpenSSL should negotiate a `null` compression algorithm (you can check it by running a network analyzer on the loopback interface). Although with a compression algorithm it may still be resolved, it would be much more complex (you would need to know the full data being sent, and even with that, the compressed length may vary in unexpected ways). While developing the challenge, the Python interpreter used did not use compression, but at the time of writing this, it seems to negotiate to DEFLATE, and I have not yet found an easy way to disable it.
+ - The peers must negotiate a `null` compression algorithm. If you use Python version 2.7.9 or newer, the daemon takes care of it. But on older Python versions, there is no way to tell the ssl layer to not use compression at all. If you use Python 2.7.8 or lower, please check that no compression algorithm is being used before trying to solve the challenge (you can do it by running a network analyzer on the loopback interface), and if any algorithm is being used, update to a newer Python version. Although with a compression algorithm the challenge may still be resolved, it would be much more complex.
 
 
 ---
