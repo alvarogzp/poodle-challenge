@@ -203,6 +203,13 @@ class SocketStreamForwarder:
         self.thread.join()
 
 
+client_ssl_context = ssl.SSLContext(SSL_VERSION)
+client_ssl_context.verify_mode = ssl.CERT_REQUIRED
+client_ssl_context.load_verify_locations("cert.pem")
+client_ssl_context.set_ciphers(CIPHER_ALGORITHM)
+client_ssl_context.options |= getattr(ssl, "OP_NO_COMPRESSION", 0)
+
+
 class SslClientRequest:
     def __init__(self, initial_payload, path, credentials, body):
         self.initial_payload = initial_payload
@@ -233,8 +240,7 @@ class SslClientRequest:
         assert ack == MITM_KEY_RECEIVED
 
     def wrap_with_ssl_socket(self, socket):
-        return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem",
-                               ssl_version=SSL_VERSION, do_handshake_on_connect=False, ciphers=CIPHER_ALGORITHM)
+        return client_ssl_context.wrap_socket(socket, server_side=False, do_handshake_on_connect=False)
 
     def perform_ssl_handshake(self, ssl_socket):
         ssl_socket.do_handshake()
