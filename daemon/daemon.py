@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
-import socket
 import SocketServer
+import re
+import socket
 import ssl
 import threading
-import sys
-import re
 
 sys.path.append("mitm")
 
