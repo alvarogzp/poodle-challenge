@@ -116,9 +116,12 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
             pass
 
     def wrap_with_ssl_socket(self, socket):
-        return ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True,
-                               cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False,
-                               ciphers=CIPHER_ALGORITHM)
+        ssl_socket = ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True,
+                                     cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False,
+                                     ciphers=CIPHER_ALGORITHM)
+        # Fix: disable compression to have predictable ciphered output (works only on python 2.7.9+)
+        ssl_socket.context |= ssl.OP_NO_COMPRESSION
+        return ssl_socket
 
     def handle_ssl_handshake(self, ssl_socket):
         ssl_socket.do_handshake()
