@@ -7,7 +7,7 @@ BLOCK_LENGTH = 16  # AES-256
 
 MITM_SERVER_ADDRESS = ("127.0.0.1", 4747)
 ORIGIN_CLIENT = "C"
-ORIGIN_SEPARATOR = "-"
+ORIGIN_SEPARATOR = ":"
 RESPONSE_SUCCESSFUL = "ok\n"
 
 PADDING_LAMBDA = 9  # To make request end on block boundary
