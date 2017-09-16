@@ -101,6 +101,14 @@ class ThreadedTCPServer(SocketServer.ThreadingTCPServer):
         self.serve_forever()
 
 
+server_ssl_context = ssl.SSLContext(SSL_VERSION)
+server_ssl_context.verify_mode = ssl.CERT_NONE
+server_ssl_context.load_cert_chain("cert.pem", "certkey.pem")
+server_ssl_context.set_ciphers(CIPHER_ALGORITHM)
+# Fix: disable compression to have predictable ciphered output (works only on python 2.7.9+)
+server_ssl_context.options |= getattr(ssl, "OP_NO_COMPRESSION", 0)
+
+
 class SslServerRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         try:
@@ -111,9 +119,7 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
             pass
 
     def wrap_with_ssl_socket(self, socket):
-        return ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True,
-                               cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False,
-                               ciphers=CIPHER_ALGORITHM)
+        return server_ssl_context.wrap_socket(socket, server_side=True, do_handshake_on_connect=False)
 
     def handle_ssl_handshake(self, ssl_socket):
         ssl_socket.do_handshake()
