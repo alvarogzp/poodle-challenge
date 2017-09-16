@@ -120,7 +120,7 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
                                      cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False,
                                      ciphers=CIPHER_ALGORITHM)
         # Fix: disable compression to have predictable ciphered output (works only on python 2.7.9+)
-        ssl_socket.context.options |= ssl.OP_NO_COMPRESSION
+        ssl_socket.context.options |= getattr(ssl, "OP_NO_COMPRESSION", 0)
         return ssl_socket
 
     def handle_ssl_handshake(self, ssl_socket):
