@@ -8,11 +8,8 @@ import threading
 
 sys.path.append("mitm")
 
-from mitm.core import set_destination_endpoint
-from mitm.extra.data_processor import server_base64_formatter, client_base64_formatter, \
-    base64_decode_and_endpoint_unformatter, FileInSocket, DataProcessorOutSocket, \
-    FormatAndDoDataProcessor, UnformatAndRouteByEndpointDataProcessor
-from mitm.extra.socket_aggregator import BaseAggregatorMitmRequestHandler, MitmSocketAggregator
+import mitm
+
 
 PUBLIC_ENDPOINT = ('', 4747)
 
@@ -105,6 +102,13 @@ class ThreadedTCPServer(SocketServer.ThreadingTCPServer):
         self.serve_forever()
 
 
+server_ssl_context = ssl.SSLContext(SSL_VERSION)
+server_ssl_context.verify_mode = ssl.CERT_NONE
+server_ssl_context.load_cert_chain("cert.pem", "certkey.pem")
+server_ssl_context.set_ciphers(CIPHER_ALGORITHM)
+server_ssl_context.options |= getattr(ssl, "OP_NO_COMPRESSION", 0)
+
+
 class SslServerRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         try:
@@ -115,9 +119,7 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
             pass
 
     def wrap_with_ssl_socket(self, socket):
-        return ssl.wrap_socket(socket, keyfile="certkey.pem", certfile="cert.pem", server_side=True,
-                               cert_reqs=ssl.CERT_NONE, ssl_version=SSL_VERSION, do_handshake_on_connect=False,
-                               ciphers=CIPHER_ALGORITHM)
+        return server_ssl_context.wrap_socket(socket, server_side=True, do_handshake_on_connect=False)
 
     def handle_ssl_handshake(self, ssl_socket):
         ssl_socket.do_handshake()
@@ -151,10 +153,10 @@ class SslServerRequestHandler(SocketServer.BaseRequestHandler):
         socket.send("error\n")
 
 
-set_destination_endpoint(INTERNAL_SSL_ENDPOINT)
+mitm.set_destination_endpoint(INTERNAL_SSL_ENDPOINT)
 
 
-class MitmServerRequestHandler(BaseAggregatorMitmRequestHandler):
+class MitmServerRequestHandler(mitm.BaseAggregatorMitmRequestHandler):
     def get_mitm_socket_aggregator(self):
         mitm_key = self.get_mitm_key(self.request)
         return self.get_mitm(mitm_key)
@@ -166,6 +168,13 @@ class MitmServerRequestHandler(BaseAggregatorMitmRequestHandler):
 
     def get_mitm(self, mitm_key):
         return MitmExchanger.instance().pop(mitm_key)
+
+
+client_ssl_context = ssl.SSLContext(SSL_VERSION)
+client_ssl_context.verify_mode = ssl.CERT_REQUIRED
+client_ssl_context.load_verify_locations("cert.pem")
+client_ssl_context.set_ciphers(CIPHER_ALGORITHM)
+client_ssl_context.options |= getattr(ssl, "OP_NO_COMPRESSION", 0)
 
 
 class SslClientRequest:
@@ -198,8 +207,7 @@ class SslClientRequest:
         assert ack == MITM_KEY_RECEIVED
 
     def wrap_with_ssl_socket(self, socket):
-        return ssl.wrap_socket(socket, server_side=False, cert_reqs=ssl.CERT_REQUIRED, ca_certs="cert.pem",
-                               ssl_version=SSL_VERSION, do_handshake_on_connect=False, ciphers=CIPHER_ALGORITHM)
+        return client_ssl_context.wrap_socket(socket, server_side=False, do_handshake_on_connect=False)
 
     def perform_ssl_handshake(self, ssl_socket):
         ssl_socket.do_handshake()
@@ -234,23 +242,23 @@ class PublicServerRequestHandler(SocketServer.StreamRequestHandler):
         return path, credentials, body
 
     def perform_https_connection(self, path, credentials, body):
-        server_socket_formatter = server_base64_formatter
+        server_socket_formatter = mitm.server_base64_formatter
         server_socket_action = self.wfile.write
-        server_socket_processor = FormatAndDoDataProcessor(server_socket_formatter, server_socket_action)
-        server_socket = DataProcessorOutSocket(server_socket_processor)
+        server_socket_processor = mitm.FormatAndDoDataProcessor(server_socket_formatter, server_socket_action)
+        server_socket = mitm.DataProcessorOutSocket(server_socket_processor)
 
-        client_socket_formatter = client_base64_formatter
+        client_socket_formatter = mitm.client_base64_formatter
         client_socket_action = self.wfile.write
-        client_socket_processor = FormatAndDoDataProcessor(client_socket_formatter, client_socket_action)
-        client_socket = DataProcessorOutSocket(client_socket_processor)
+        client_socket_processor = mitm.FormatAndDoDataProcessor(client_socket_formatter, client_socket_action)
+        client_socket = mitm.DataProcessorOutSocket(client_socket_processor)
 
-        recv_socket = FileInSocket(self.rfile)
+        recv_socket = mitm.FileInSocket(self.rfile)
 
-        send_socket_unformatter = base64_decode_and_endpoint_unformatter
-        send_socket_processor = UnformatAndRouteByEndpointDataProcessor(send_socket_unformatter)
-        send_socket = DataProcessorOutSocket(send_socket_processor)
+        send_socket_unformatter = mitm.base64_decode_and_endpoint_unformatter
+        send_socket_processor = mitm.UnformatAndRouteByEndpointDataProcessor(send_socket_unformatter)
+        send_socket = mitm.DataProcessorOutSocket(send_socket_processor)
 
-        mitm_socket = MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
+        mitm_socket = mitm.MitmSocketAggregator(server_socket, client_socket, recv_socket, send_socket)
         mitm_socket_key = MitmExchanger.instance().put(mitm_socket)
 
         ssl_client = SslClientRequest(str(mitm_socket_key), path, credentials, body)
