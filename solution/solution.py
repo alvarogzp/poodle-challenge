@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import socket
-import sys
 
 TLS_CONTENT_TYPE_APPLICATION_DATA = "\x17"
 BLOCK_LENGTH = 16  # AES-256
