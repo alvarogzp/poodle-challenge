@@ -99,7 +99,7 @@ Finally, the `solution/` directory contain the proposed solution that were creat
 
 In order for the challenge to be feasibly solved as it was proposed, the daemon script must be run under the following conditions:
 
- - The Python interpreter must have been compiled with SSLv3 support enabled. Otherwise, it will fail to properly startup. Modern versions ship with SSLv3 disabled for security reasons. If it seems to be your case, you might need to compile Python for yourself (or try to run it on an older operating system version).
+ - The Python interpreter must have been compiled and run with an underlying ssl library that has SSLv3 support enabled. Otherwise, it will fail to properly startup. Recent ssl libraries versions ship with SSLv3 disabled to avoid insecure connections. If it seems to be your case, you might need to tweak and compile the ssl library and Python for yourself (or try to run the daemon on an older operating system version).
 
  - The peers must negotiate a `null` compression algorithm. If you use Python version 2.7.9 or newer, the daemon takes care of it. But on older Python versions, there is no way to tell the ssl layer to not use compression at all. If you use Python 2.7.8 or lower, please check that no compression algorithm is being used before trying to solve the challenge (you can do it by running a network analyzer on the loopback interface), and if any algorithm is being used, update to a newer Python version. Although with a compression algorithm the challenge may still be resolved, it would be much more complex.
 
