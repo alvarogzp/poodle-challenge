@@ -99,9 +99,9 @@ Finally, the `solution/` directory contain the proposed solution that were creat
 
 In order for the challenge to be feasibly solved as it was proposed, the daemon script must be run under the following conditions:
 
- - The Python interpreter must have been compiled and run with an underlying ssl library that has SSLv3 support enabled. Otherwise, it will fail to properly startup. Recent ssl libraries versions ship with SSLv3 disabled to avoid insecure connections. If it seems to be your case, you might need to tweak and compile the ssl library and Python for yourself (or try to run the daemon on an older operating system version).
+- A Python 2 interpreter is required. The minimum supported version is 2.7.9, due to some changes introduced in that version to the ssl module, that are needed to be able to disable the use of compression at the ssl layer. On lower versions this is not possible, and a compression algorithm may be negotiated between the peers. And, although the challenge could still be resolved, it would be much more complex and out of the proposed scope.
 
- - The peers must negotiate a `null` compression algorithm. If you use Python version 2.7.9 or newer, the daemon takes care of it. But on older Python versions, there is no way to tell the ssl layer to not use compression at all. If you use Python 2.7.8 or lower, please check that no compression algorithm is being used before trying to solve the challenge (you can do it by running a network analyzer on the loopback interface), and if any algorithm is being used, update to a newer Python version. Although with a compression algorithm the challenge may still be resolved, it would be much more complex.
+ - The Python interpreter must have been compiled and run with an underlying ssl library that has SSLv3 support enabled. Otherwise, it will fail to properly startup. Recent ssl libraries versions ship with SSLv3 disabled to avoid insecure connections. If it seems to be your case, you might need to tweak and compile the ssl library and Python for yourself (or try to run the daemon on an older operating system version).
 
 
 ---
